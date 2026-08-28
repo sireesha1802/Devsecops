@@ -1,0 +1,648 @@
+# AWS 3-Tier Architecture Project
+
+This project demonstrates how to deploy a secure and highly available **3-Tier Architecture on AWS**.
+
+### Screenshot: Architecture
+
+![Screenshot 1 - Architecture](images/Architecture.png)
+
+---
+
+# Architecture Overview
+
+The application is divided into three layers:
+
+## 1. Web Tier
+
+- Two EC2 instances
+- Deployed in Public Subnets
+- Distributed across two Availability Zones
+- Receives user requests through an Application Load Balancer
+
+## 2. Application Tier
+
+- Two EC2 instances
+- Deployed in Private Subnets
+- Contains the application services
+- Not directly accessible from the internet
+
+## 3. Database Tier
+
+- Amazon RDS
+- Deployed in Private Database Subnets
+- Accessible only from the Application Tier
+- Not publicly accessible
+
+---
+
+# Architecture Flow
+
+```text
+Users
+  |
+Internet
+  |
+Internet Gateway
+  |
+Application Load Balancer
+  |
+Web Tier EC2 Instances
+  |
+Application Tier EC2 Instances
+  |
+Amazon RDS Database
+```
+
+---
+
+# AWS Services Used
+
+- Amazon VPC
+- Amazon EC2
+- Application Load Balancer (ALB)
+- Amazon RDS
+- Internet Gateway
+- NAT Gateway
+- Route Tables
+- Security Groups
+- Public Subnets
+- Private Subnets
+
+---
+
+# Step 1: Create a VPC
+
+Create a VPC with the required CIDR block.
+
+Example:
+
+```text
+VPC Name: three-tier-vpc
+CIDR Block: 10.0.0.0/16
+```
+
+### Screenshot: VPC
+
+![Screenshot 2 - VPC](images/vpc.png)
+
+---
+
+# Step 2: Create Subnets
+
+Create subnets across two Availability Zones.
+
+| Tier | Availability Zone 1 | Availability Zone 2 |
+|---|---|---|
+| Web Tier | Public Subnet 1 | Public Subnet 2 |
+| Application Tier | Private App Subnet 1 | Private App Subnet 2 |
+| Database Tier | Private DB Subnet 1 | Private DB Subnet 2 |
+
+
+### Screenshot: Subnets
+
+![Screenshot 3 - Subnets](images/subnets.png)
+
+The subnets should use non-overlapping CIDR ranges.
+
+---
+
+# Step 3: Create an Internet Gateway
+
+1. Open the AWS VPC Console.
+2. Go to **Internet Gateways**.
+3. Create an Internet Gateway.
+4. Attach the Internet Gateway to the VPC.
+
+The Internet Gateway provides internet connectivity to resources in the Public Subnets.
+
+---
+
+# Step 4: Configure Public Route Table
+
+Create a Public Route Table and associate it with:
+
+- Public Subnet 1
+- Public Subnet 2
+
+Add the following route:
+
+```text
+Destination: 0.0.0.0/0
+Target: Internet Gateway
+```
+
+### Screenshot: Routes
+
+![Screenshot 4 - Routes](images/routes.png)
+
+---
+
+# Step 5: Create NAT Gateways
+
+Create NAT Gateways inside the Public Subnets.
+
+For high availability:
+
+- NAT Gateway 1 → Public Subnet 1
+- NAT Gateway 2 → Public Subnet 2
+
+Allocate an Elastic IP address for each NAT Gateway.
+
+NAT Gateway allows instances in Private Subnets to access the internet for:
+
+- Package installation
+- Software updates
+- Application updates
+
+Private instances cannot receive direct inbound traffic from the internet.
+
+---
+
+# Step 6: Configure Private Route Tables
+
+Associate the Private Application Subnets with Private Route Tables.
+
+Add the route:
+
+```text
+Destination: 0.0.0.0/0
+Target: NAT Gateway
+```
+
+---
+
+# Step 7: Create Security Groups
+
+## ALB Security Group
+
+Allow:
+
+| Type | Port | Source |
+|---|---:|---|
+| HTTP | 80 | 0.0.0.0/0 |
+| HTTPS | 443 | 0.0.0.0/0 |
+
+---
+
+## Web Server Security Group
+
+Allow HTTP traffic from the ALB Security Group.
+
+| Type | Port | Source |
+|---|---:|---|
+| HTTP | 80 | ALB Security Group |
+
+SSH should be restricted to trusted administrative access.
+
+---
+
+## Application Server Security Group
+
+Allow application traffic only from the Web Tier Security Group.
+
+Example:
+
+| Type | Port | Source |
+|---|---:|---|
+| Application | Application Port | Web Security Group |
+
+---
+
+## RDS Security Group
+
+Allow database traffic only from the Application Server Security Group.
+
+For MySQL:
+
+| Type | Port | Source |
+|---|---:|---|
+| MySQL/Aurora | 3306 | Application Security Group |
+
+---
+
+# Step 8: Launch Web Tier EC2 Instances
+
+Launch two EC2 instances:
+
+```text
+Web EC2 1 → Public Subnet 1
+Web EC2 2 → Public Subnet 2
+```
+
+Install Nginx:
+
+```bash
+sudo apt update
+sudo apt install nginx -y
+sudo systemctl enable nginx
+sudo systemctl start nginx
+```
+
+Verify:
+
+```bash
+curl http://localhost
+```
+
+---
+
+# Step 9: Create Launch Template for Web Tier
+
+Go to:
+
+```text
+EC2 Console
+→ Launch Templates
+→ Create Launch Template
+```
+
+Configure:
+
+```text
+Launch Template Name: web-tier-launch-template
+AMI: Ubuntu
+Instance Type: t2.micro
+Security Group: Web Tier Security Group
+```
+
+## User Data
+
+Use the following script:
+
+```bash
+#!/bin/bash
+
+apt update -y
+apt install nginx -y
+
+systemctl enable nginx
+systemctl start nginx
+```
+
+This ensures that every instance launched by the Auto Scaling Group automatically installs and starts Nginx.
+
+---
+
+# Step 10: Create Auto Scaling Group
+
+Go to:
+
+```text
+EC2 Console
+→ Auto Scaling Groups
+→ Create Auto Scaling Group
+```
+
+Select:
+
+```text
+Launch Template:
+web-tier-launch-template
+```
+
+Select:
+
+```text
+Public Subnet 1
+Public Subnet 2
+```
+
+Configure capacity:
+
+```text
+Minimum Capacity: 1
+Desired Capacity: 1
+Maximum Capacity: 3
+```
+### Screenshot: Auto Scaling Group
+
+![Screenshot 5 - Auto Scaling Group](images/ASG.png)
+---
+
+# Step 11: Attach ASG to Target Group
+
+During Auto Scaling Group creation:
+
+1. Select **Attach to an existing load balancer**.
+2. Select the Application Load Balancer Target Group.
+
+Architecture:
+
+```text
+Application Load Balancer
+          |
+          v
+     Target Group
+          |
+    Auto Scaling Group
+          |
+    +-----+-----+
+    |           |
+    v           v
+  Web EC2     Web EC2
+```
+
+When the ASG launches a new instance:
+
+```text
+New EC2 Instance
+       |
+       v
+Automatically registered
+       |
+       v
+ALB Target Group
+       |
+       v
+ALB starts sending traffic
+```
+
+---
+
+# Step 12: Configure Auto Scaling Policy
+
+Configure a **Target Tracking Scaling Policy**.
+
+Example:
+
+```text
+Metric: Average CPU Utilization
+Target Value: 70%
+```
+
+Scaling behavior:
+
+```text
+CPU Usage Increases
+        |
+        v
+CloudWatch Metric
+        |
+        v
+Auto Scaling Policy
+        |
+        v
+ASG Launches New EC2 Instance
+```
+
+When CPU utilization decreases:
+
+```text
+CPU Usage Decreases
+        |
+        v
+ASG Terminates Unnecessary Instances
+```
+
+---
+
+# Step 13: Launch Application Tier EC2 Instances
+
+Launch two EC2 instances:
+
+```text
+App EC2 1 → Private App Subnet 1
+App EC2 2 → Private App Subnet 2
+```
+
+Install and configure the application.
+
+Connect to EC2 instance in private subnet through EC2 instance in public subnet by passing the keypair of the Application tier instance.
+
+```
+
+vi test.pem
+ssh -i test.pem ubuntu@privateIP
+```
+
+Test the application from the Web Tier:
+
+```bash
+curl http://APP_SERVER_PRIVATE_IP:APPLICATION_PORT
+curl google.com
+ping google.com
+```
+### Screenshot: Check the connectivity of private server
+
+![Screenshot 4 - Application tier server](images/app-connection.png)
+---
+
+# Step 14: Create Amazon RDS
+
+Create an RDS database.
+
+Recommended configuration:
+
+```text
+Public Access: No
+Database Subnet Group: Private Database Subnets
+Security Group: RDS Security Group
+```
+### Screenshot: Create RDS
+
+![Screenshot 4 - Create RDS](images/RDS.png)
+
+The database should not be directly accessible from the internet.
+
+---
+
+# Step 15: Test RDS Connectivity
+
+Install the MySQL client:
+
+```bash
+sudo apt update
+sudo apt install mysql-client -y
+```
+
+Test port connectivity:
+
+```bash
+nc -zv RDS_ENDPOINT 3306
+```
+
+Connect to the database:
+
+```bash
+mysql -h RDS_ENDPOINT -P 3306 -u USERNAME -p
+```
+
+### Screenshot: Check the connectivity of RDS
+
+![Screenshot 4 - Database Connectivity](images/RDS-connectivity.png)
+
+
+> Note: Do not use `curl` to test MySQL connectivity because MySQL on port 3306 does not use the HTTP protocol.
+
+---
+
+# Step 16: Create Target Groups
+
+Create target groups for the EC2 instances.
+
+Example configuration:
+
+```text
+Target Type: Instance
+Protocol: HTTP
+Port: 80
+```
+
+Register the required EC2 instances.
+
+Configure the health check path based on your application.
+
+
+---
+
+# Step 17: Create Application Load Balancer
+
+Create an Internet-facing Application Load Balancer.
+
+Configuration:
+
+```text
+Scheme: Internet-facing
+IP Address Type: IPv4
+
+Subnets:
+- Public Subnet 1
+- Public Subnet 2
+
+Security Group:
+- ALB Security Group
+```
+
+Create a listener:
+
+```text
+Protocol: HTTP
+Port: 80
+```
+### Screenshot: Create ALB 
+
+![Screenshot 4 - ALB ](images/ALB.png)
+
+Configure the listener to forward requests to the target group.
+
+---
+
+# Step 18: Test the Architecture
+
+## Test Web Server
+
+```bash
+curl http://WEB_SERVER_IP
+```
+
+## Test Application Server
+
+From the Web Tier:
+
+```bash
+curl http://APP_SERVER_PRIVATE_IP:APPLICATION_PORT
+```
+
+## Test RDS
+
+```bash
+nc -zv RDS_ENDPOINT 3306
+```
+
+Connect to MySQL:
+
+```bash
+mysql -h RDS_ENDPOINT -P 3306 -u USERNAME -p
+```
+
+## Test Application Load Balancer
+
+Open:
+
+```text
+http://ALB-DNS-NAME
+```
+
+---
+
+# Troubleshooting
+
+## Target Group Shows Unhealthy
+
+Check:
+
+- EC2 instance is running
+- Application is running
+- Correct target port is configured
+- Security Group allows ALB traffic
+- Health check path is correct
+- Application returns HTTP 200
+
+Useful commands:
+
+```bash
+sudo systemctl status nginx
+sudo ss -tulpn
+curl -I http://localhost
+```
+
+---
+
+## Cannot Connect to Application Server
+
+Check:
+
+- Security Groups
+- Route Tables
+- Network ACLs
+- Application service status
+- Correct private IP and application port
+
+---
+
+## Cannot Connect to RDS
+
+Check:
+
+- RDS status is `Available`
+- Correct RDS endpoint
+- RDS Security Group allows port 3306
+- Source is the Application Server Security Group
+- Correct username and password
+
+---
+
+# Security Best Practices
+
+- Keep Application Servers in Private Subnets.
+- Keep RDS in Private Subnets.
+- Do not make the database publicly accessible.
+- Use Security Group references between tiers.
+- Restrict SSH access.
+- Use IAM Roles instead of access keys.
+- Store credentials in AWS Secrets Manager.
+- Enable CloudWatch monitoring.
+- Enable automated RDS backups.
+- Use HTTPS for production applications.
+
+---
+
+# Project Outcome
+
+This project demonstrates:
+
+- AWS 3-Tier Architecture
+- Multi-AZ deployment
+- Public and Private Subnet design
+- Internet Gateway
+- NAT Gateway
+- Application Load Balancer
+- Target Groups
+- EC2 Web Tier
+- EC2 Application Tier
+- Amazon RDS Database
+- Security Groups
+- Route Tables
+- Application connectivity and troubleshooting
+
+---

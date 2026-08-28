@@ -407,12 +407,14 @@ App EC2 2 → Private App Subnet 2
 
 Install and configure the application.
 
-Connect to EC2 instance in private subnet through EC2 instance in public subnet by passing the keypair of the Application tier instance.
+## Connect to Private Application Server
 
-```
+Connect to the Application Tier EC2 instance through the EC2 instance in the Public Subnet.
 
+```bash
 vi test.pem
-ssh -i test.pem ubuntu@privateIP
+chmod 400 test.pem
+ssh -i test.pem ubuntu@PRIVATE_IP
 ```
 
 Test the application from the Web Tier:

@@ -1,0 +1,29 @@
+1.Which AWS service is used to build chatbots?
+Amazon Lex is used to build chatbots.
+
+2.Which service performs sentiment analysis on text?
+Amazon Comprehend is used for sentiment analysis.
+
+3.What is the use of Amazon Transcribe?
+Amazon transcribe is used to convert speech to text.
+
+4.Which AWS service extracts text from scanned documents?
+Amazon textract is used to extract text from scanned documents.
+
+5.What does AWS translate do?
+It’s a language translater translate from one language to another.
+
+6.Which AWS service can detect faces in images?
+Amazon Rekognition can detect faces.
+
+7.Explain Amazon Comprehend in simple words?
+Amazon comprehends is used for sentiment analysis and important entities.
+
+8.How does Amazon Lex understand user input?
+Amazon lex uses NLU to understand user input.
+
+9.Amazon Rekognition can analyze videos.(True/false)?
+True.
+
+10.Amazon Comprehend is an NLP service(True/False)?
+True.
